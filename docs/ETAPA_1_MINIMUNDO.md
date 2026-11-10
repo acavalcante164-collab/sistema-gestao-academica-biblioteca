@@ -1,7 +1,7 @@
 
 # ETAPA 1: Definição do Minimundo
 
-**Projeto:** Sistema Integrado de Gestão Acadêmica e Biblioteca (SIGAB)  
+**Projeto:** Sistema Integrado de Gestão Acadêmica e Biblioteca (SIGAA)  
 **Equipe:** Alonso, Ruan, Gwylhermme e Francisco  
 **SGBD:** Oracle Database, via SQL Developer
 
