@@ -2,7 +2,7 @@
 
 Este projeto apresenta a implementação de tudo que foi abordado na disciplina de Banco de Dados I.
 
-A descrição e requisitos do projeto estão disponíveis em [specs/](specs/ESPECIFICAÇÃO DO TRABALHO PRÁTICO FINAL.pdf).
+A descrição e requisitos do projeto estão disponíveis em [specs/](specs/ESPECIFICAÇÃODOTRABALHOPRÁTICOFINAL.pdf).
 
 ---
 
