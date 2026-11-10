@@ -1,7 +1,7 @@
 
 # ETAPA 1: Definição do Minimundo
 
-**Projeto:** Sistema Integrado de Gestão Acadêmica e Biblioteca (SIGAB)  
+**Projeto:** Sistema Integrado de Gestão Acadêmica e Biblioteca (SIGAA)  
 **Equipe:** Alonso, Ruan, Gwylhermme e Francisco  
 **SGBD:** Oracle Database, via SQL Developer
 
@@ -118,7 +118,7 @@ Para manter o projeto viável no prazo, não serão implementados:
 | RN16 | Toda alteração de nota deve ser registrada em log (valor anterior, novo valor, data e usuário). |
 
 > [!IMPORTANT]
-> Os valores numéricos (6,0, 75%, 3/5 empréstimos, 7/15 dias, R$ 1,00) são **parâmetros propostos pela equipe**, com base em práticas comuns. Se a UFRR ou a biblioteca utilizar outros valores, eles devem ser ajustados nesta etapa, pois serão implementados posteriormente nos `CHECK` e nas triggers.
+> Os valores numéricos (6,0, 75%, 3/5 empréstimos, 7/15 dias, R$ 1,00) são **parâmetros propostos pela nossa**, com base em práticas comuns.
 
 ## 1.9 Processos principais
 
