@@ -11,7 +11,7 @@
 
 O minimundo é uma instituição de ensino superior que administra, no mesmo sistema, dois processos hoje tratados separadamente: a **vida acadêmica** (cursos, disciplinas, turmas, matrículas, notas e frequência) e a **biblioteca** (acervo, exemplares, empréstimos, reservas e multas).
 
-A instituição é organizada em **departamentos**, que ofertam **cursos** e **disciplinas**. Cada semestre, os departamentos abrem **turmas**, que são ofertas de uma disciplina conduzidas por um professor, com horário, sala e número limitado de vagas. Os alunos se **matriculam** nas turmas e, ao longo do semestre, recebem nota e frequência, até a situação final (aprovado, reprovado por nota, reprovado por falta ou trancado).
+A instituição é organizada em **departamentos**, que ofertam **cursos** e **disciplinas** e abrigam **professores**. Cada semestre, os departamentos abrem **turmas**, que são ofertas de uma disciplina conduzidas por um professor, com horário, sala e número limitado de vagas. Os alunos se **matriculam** nas turmas e, ao longo do semestre, recebem nota e frequência, até a situação final (aprovado, reprovado por nota, reprovado por falta ou trancado).
 
 A biblioteca mantém um **acervo de obras** (livros, periódicos, TCCs). Cada obra tem um ou mais **exemplares físicos** numerados, que podem ser emprestados a alunos e professores. Quando todos os exemplares estão emprestados, o usuário pode fazer uma **reserva**. Devoluções em atraso geram **multas**, e o usuário com multa pendente fica impedido de novos empréstimos.
 
@@ -116,6 +116,7 @@ Para manter o projeto viável no prazo, não serão implementados:
 | RN14 | Usuário com multa pendente não pode fazer novo empréstimo. |
 | RN15 | Reserva só é permitida para obra sem exemplar disponível. |
 | RN16 | Toda alteração de nota deve ser registrada em log (valor anterior, novo valor, data e usuário). |
+| RN17 | Todo professor pertence a exatamente um departamento. |
 
 > [!IMPORTANT]
 > Os valores numéricos (6,0, 75%, 3/5 empréstimos, 7/15 dias, R$ 1,00) são **parâmetros propostos pela nossa equipe**, com base em práticas comuns.
