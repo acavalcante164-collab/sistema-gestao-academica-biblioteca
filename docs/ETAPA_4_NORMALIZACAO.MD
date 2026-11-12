@@ -1,132 +1,147 @@
 # ETAPA 4: Memorial de Dependências Funcionais e Normalização (1FN à FNBC)
 
-**Projeto:** Sistema Integrado de Gestão Acadêmica e Biblioteca (SIGAB)  
-**Milestone:** M2 - Modelo Relacional e Normalização  
-**Referência:** Issue #5  
+**Projeto:** Sistema Integrado de Gestão Acadêmica e Biblioteca (SIGAB) — Grupo 06  
+**Disciplina:** DCC 502 - Banco de Dados I (UFRR)  
+**Milestone:** M2 - Modelo Relacional e Normalização (Issue #5)  
 
 ---
 
-## 1. Visão Geral do Esquema Relacional Base (Pós-Mapeamento E-R)
+## 1. Visão Geral do Mapeamento Relacional (Baseado na Etapa 2 - DER)
 
-Para demonstrar o processo formal de normalização (1FN $\rightarrow$ 2FN $\rightarrow$ 3FN $\rightarrow$ FNBC), partimos de visões preliminares não normalizadas (ou parcialmente mapeadas) extraídas do minimundo e demonstramos passo a passo as decomposições sem perda de informação (junção sem perda) e com preservação de dependências.
+A partir das 15 entidades e 16 relacionamentos levantados na Etapa 2 (`Levantamento_DER`), o mapeamento para o modelo relacional resulta em **18 relações** (as 15 entidades mais 3 tabelas originadas de atributo multivalorado e relacionamentos `N:M` sem atributos próprios):
+
+1. **PESSOA** (<u>id_pessoa</u>, cpf, nome, data_nascimento, email, rua, numero, bairro, cidade, cep, tipo_pessoa)
+2. **TELEFONE_PESSOA** (<u>id_pessoa</u>, <u>telefone</u>)
+3. **ALUNO** (<u>id_pessoa</u>, matricula, data_ingresso, id_curso)
+4. **PROFESSOR** (<u>id_pessoa</u>, titulacao, data_admissao, id_departamento)
+5. **DEPARTAMENTO** (<u>id_departamento</u>, nome, sigla)
+6. **CURSO** (<u>id_curso</u>, nome, carga_horaria, id_departamento)
+7. **DISCIPLINA** (<u>id_disciplina</u>, codigo, nome, carga_horaria, id_departamento)
+8. **PRE_REQUISITO** (<u>id_disciplina</u>, <u>id_disciplina_req</u>)
+9. **TURMA** (<u>id_turma</u>, semestre, vagas_total, sala, horario, id_disciplina, id_professor)
+10. **MATRICULA** (<u>id_aluno</u>, <u>id_turma</u>, data_matricula, nota_final, frequencia, situacao)
+11. **AUDITORIA_NOTA** (<u>id_auditoria</u>, id_aluno, id_turma, nota_anterior, nota_nova, data_alteracao, usuario)
+12. **OBRA** (<u>id_obra</u>, titulo, tipo, ano_publicacao, editora)
+13. **AUTOR** (<u>id_autor</u>, nome)
+14. **AUTORIA** (<u>id_obra</u>, <u>id_autor</u>)
+15. **EXEMPLAR** (<u>id_obra</u>, <u>numero_exemplar</u>, data_aquisicao)
+16. **EMPRESTIMO** (<u>id_emprestimo</u>, id_pessoa, id_obra, numero_exemplar, data_emprestimo, data_prevista_devolucao, data_devolucao)
+17. **RESERVA** (<u>id_reserva</u>, id_pessoa, id_obra, data_reserva, situacao)
+18. **MULTA** (<u>id_multa</u>, id_emprestimo, valor, data_geracao, data_pagamento)
 
 ---
 
 ## 2. Primeira Forma Normal (1FN)
-**Definição:** Uma relação está na 1FN se e somente se todos os domínios de seus atributos contêm apenas valores atômicos (indivisíveis) e não existem grupos repetitivos ou atributos multivalorados.
 
-### 2.1. Tratamento de Atributos Compostos e Multivalorados em `PESSOA`
-* **Estado Inicial (Não Normalizado - $\text{UNF}$):**
-  $$\text{PESSOA\_UNF}(\underline{\text{id\_pessoa}}, \text{cpf}, \text{nome}, \text{email}, \text{tipo\_pessoa}, \text{endereco\_completo}, \{\text{telefones}\})$$
-* **Análise de Violação:**
-  1. `endereco_completo` é um atributo composto (contém logradouro, número, bairro, cidade, UF e CEP), prejudicando filtros analíticos por bairro ou CEP.
-  2. `{telefones}` é um atributo multivalorado (uma pessoa pode possuir vários números de telefone), violando a atomicidade da 1FN.
+**Definição:** Uma relação encontra-se na **1FN** se e somente se todos os seus atributos contêm apenas valores atômicos (indivisíveis) e não existem atributos compostos ou grupos repetitivos (multivalorados).
+
+### 2.1. Tratamento de `endereco` (Composto) e `telefone` (Multivalorado) em `PESSOA`
+* **Esquema Preliminar (Não Normalizado - UNF):**
+  * **PESSOA_UNF** (<u>id_pessoa</u>, cpf, nome, data_nascimento, email, endereco(rua, numero, bairro, cidade, cep), {telefone})
+* **Violações da 1FN identificadas:**
+  1. O atributo `endereco` é composto por cinco subatributos (`rua`, `numero`, `bairro`, `cidade`, `cep`).
+  2. O atributo `{telefone}` é multivalorado, pois uma mesma pessoa pode possuir mais de um número de telefone cadastrado.
 * **Decomposição para 1FN:**
-  1. Decompomos `endereco_completo` em atributos atômicos na própria tabela `PESSOA`.
-  2. Removemos o grupo repetitivo `{telefones}` criando uma relação própria `TELEFONE_PESSOA`, cuja chave primária é composta pela chave estrangeira de `PESSOA` e pelo próprio número do telefone.
-* **Esquema Resultante em 1FN:**
-  * $\text{PESSOA}(\underline{\text{id\_pessoa}}, \text{cpf}, \text{nome}, \text{email}, \text{tipo\_pessoa}, \text{end\_logradouro}, \text{end\_numero}, \text{end\_bairro}, \text{end\_cidade}, \text{end\_uf}, \text{end\_cep})$
-  * $\text{TELEFONE\_PESSOA}(\underline{\text{id\_pessoa}}, \underline{\text{numero\_telefone}}, \text{tipo\_telefone})$
+  1. Os componentes do endereço composto são achatados em atributos simples e atômicos diretamente na relação `PESSOA`.
+  2. O atributo multivalorado `{telefone}` é extraído para uma nova relação `TELEFONE_PESSOA`, cuja chave primária é composta pela chave estrangeira `id_pessoa` e pelo próprio atributo `telefone`.
+* **Relações Resultantes em 1FN:**
+  * **PESSOA** (<u>id_pessoa</u>, cpf, nome, data_nascimento, email, rua, numero, bairro, cidade, cep, tipo_pessoa)
+  * **TELEFONE_PESSOA** (<u>id_pessoa</u>, <u>telefone</u>)
 
-### 2.2. Tratamento de Múltiplos Autores em `OBRA`
-* **Estado Inicial ($\text{UNF}$):** $\text{OBRA\_UNF}(\underline{\text{id\_obra}}, \text{isbn}, \text{titulo}, \text{tipo\_obra}, \text{ano\_publicacao}, \{\text{id\_autor}, \text{nome\_autor}, \text{ordem\_autoria}\})$
-* **Decomposição para 1FN:** Separação em três relações atômicas:
-  * $\text{OBRA}(\underline{\text{id\_obra}}, \text{isbn}, \text{titulo}, \text{tipo\_obra}, \text{ano\_publicacao}, \text{editora})$
-  * $\text{AUTOR}(\underline{\text{id\_autor}}, \text{nome\_autor}, \text{nacionalidade})$
-  * $\text{AUTORIA}(\underline{\text{id\_obra}}, \underline{\text{id\_autor}}, \text{ordem\_autoria})$
+### 2.2. Tratamento de Múltiplos Autores por Obra (Relacionamento R9)
+* **Esquema Preliminar (UNF):**
+  * **OBRA_UNF** (<u>id_obra</u>, titulo, tipo, ano_publicacao, editora, {id_autor, nome_autor})
+* **Decomposição para 1FN:** Separação do grupo repetitivo de autores na entidade `AUTOR` e na relação associativa `AUTORIA`:
+  * **OBRA** (<u>id_obra</u>, titulo, tipo, ano_publicacao, editora)
+  * **AUTOR** (<u>id_autor</u>, nome)
+  * **AUTORIA** (<u>id_obra</u>, <u>id_autor</u>)
 
 ---
 
 ## 3. Segunda Forma Normal (2FN)
-**Definição:** Uma relação está na 2FN se está na 1FN e todo atributo não-primo (que não faz parte de nenhuma chave candidata) é total e funcionalmente dependente de toda a chave primária (ausência de dependências funcionais parciais).
 
-> **Nota Teórica:** Relações em 1FN cuja chave primária é simples (formada por um único atributo) já estão automaticamente na 2FN. Portanto, a análise de 2FN concentra-se nas relações com **chaves primárias compostas**.
+**Definição:** Uma relação está na **2FN** se está na 1FN e todo atributo não-primo (que não pertence a nenhuma chave candidata) é total e funcionalmente dependente de **toda** a chave primária (ausência de dependências funcionais parciais).
 
-### 3.1. Análise de `MATRICULA` (Chave Composta Inicial)
-* **Cenário Preliminar (1FN):** Suponha uma relação de matrícula identificada por $(\text{id\_aluno}, \text{id\_turma})$ que armazene também dados da disciplina e do aluno para facilitar relatórios:
-  $$\text{MATRICULA\_1FN}(\underline{\text{id\_aluno}}, \underline{\text{id\_turma}}, \text{data\_matricula}, \text{nota\_final}, \text{frequencia}, \text{nome\_aluno}, \text{id\_disciplina}, \text{nome\_disciplina})$$
-* **Dependências Funcionais Identificadas:**
-  * $DF_1: \{\text{id\_aluno}, \text{id\_turma}\} \rightarrow \{\text{data\_matricula}, \text{nota\_final}, \text{frequencia}\}$ *(Dependência Total)*
-  * $DF_2: \{\text{id\_aluno}\} \rightarrow \{\text{nome\_aluno}\}$ *(Violação de 2FN: Dependência Parcial)*
-  * $DF_3: \{\text{id\_turma}\} \rightarrow \{\text{id\_disciplina}, \text{nome\_disciplina}\}$ *(Violação de 2FN: Dependência Parcial)*
-* **Decomposição para 2FN:**
-  Os atributos parcialmente dependentes são movidos para suas respectivas relações determinantes (`PESSOA`/`ALUNO` e `TURMA`/`DISCIPLINA`), restando em `MATRICULA` apenas atributos que dependem do par $(\text{id\_aluno}, \text{id\_turma})$ (ou de uma chave substituta `id_matricula` com constraint `UNIQUE(id_aluno, id_turma)` conforme RN06):
-  * $\text{MATRICULA}(\underline{\text{id\_matricula}}, \text{id\_aluno}, \text{id\_turma}, \text{data\_matricula}, \text{nota\_final}, \text{frequencia}, \text{status\_matricula})$
+> **Observação Formal:** Todas as relações do esquema cuja chave primária é simples (`PESSOA`, `ALUNO`, `PROFESSOR`, `DEPARTAMENTO`, `CURSO`, `DISCIPLINA`, `TURMA`, `AUDITORIA_NOTA`, `OBRA`, `AUTOR`, `EMPRESTIMO`, `RESERVA`, `MULTA`) e que já estão na 1FN encontram-se **automaticamente na 2FN**, pois não há como existir dependência parcial de uma chave de atributo único. A verificação de 2FN concentra-se nas relações com **chave primária composta**.
 
-### 3.2. Análise da Entidade Fraca `EXEMPLAR` (RN09)
-* **Esquema:** $\text{EXEMPLAR}(\underline{\text{id\_obra}}, \underline{\text{num\_exemplar}}, \text{codigo\_barras}, \text{estado\_conservacao}, \text{status\_disponibilidade})$
-* **Dependências Funcionais:**
-  * $DF_1: \{\text{id\_obra}, \text{num\_exemplar}\} \rightarrow \{\text{codigo\_barras}, \text{estado\_conservacao}, \text{status\_disponibilidade}\}$
-  * Nenhum atributo não-primo depende apenas de `id_obra` (pois exemplares diferentes da mesma obra têm códigos de barras, estados de conservação e disponibilidades distintas) nem apenas de `num_exemplar` (pois o exemplar nº 1 existe em diversas obras).
-* **Conclusão:** `EXEMPLAR` encontra-se integralmente na **2FN**.
+### 3.1. Análise da Entidade Associativa `MATRICULA` (R6)
+* **Cenário com Violação de 2FN (Hipotético antes da decomposição):**
+  Se a relação `MATRICULA` armazenasse informações da turma ou do aluno junto ao registro de matrícula:
+  * **MATRICULA_1FN** (<u>id_aluno</u>, <u>id_turma</u>, data_matricula, nota_final, frequencia, situacao, matricula_aluno, semestre_turma, id_disciplina)
+* **Dependências Funcionais identificadas:**
+  * `DF1:` `{id_aluno, id_turma} → {data_matricula, nota_final, frequencia, situacao}` *(Dependência Total)*
+  * `DF2:` `{id_aluno} → {matricula_aluno}` *(Violação de 2FN — Dependência Parcial)*
+  * `DF3:` `{id_turma} → {semestre_turma, id_disciplina}` *(Violação de 2FN — Dependência Parcial)*
+* **Solução no Modelo SIGAB (Conformidade com 2FN):**
+  Os atributos parcialmente dependentes permanecem exclusivamente nas relações `ALUNO` e `TURMA`. Na relação `MATRICULA`, restam apenas os atributos que dependem funcionalmente do par `{id_aluno, id_turma}`:
+  * **MATRICULA** (<u>id_aluno</u>, <u>id_turma</u>, data_matricula, nota_final, frequencia, situacao)
 
-### 3.3. Análise das Tabelas Associativas (`PREREQUISITO` e `AUTORIA`)
-* $\text{PREREQUISITO}(\underline{\text{id\_disciplina}}, \underline{\text{id\_disciplina\_req}})$: Composta exclusivamente por atributos primos (todos fazem parte da PK). Está automaticamente em **2FN, 3FN e FNBC**.
-* $\text{AUTORIA}(\underline{\text{id\_obra}}, \underline{\text{id\_autor}}, \text{ordem\_autoria})$: O atributo `ordem_autoria` (1º autor, 2º autor) depende conjuntamente da obra e do autor ($\{\text{id\_obra}, \text{id\_autor}\} \rightarrow \text{ordem\_autoria}$). Está na **2FN**.
+### 3.2. Análise da Entidade Fraca `EXEMPLAR` (R10)
+* **Esquema:** **EXEMPLAR** (<u>id_obra</u>, <u>numero_exemplar</u>, data_aquisicao)
+* **Dependência Funcional:**
+  * `DF1:` `{id_obra, numero_exemplar} → {data_aquisicao}`
+* **Justificativa de 2FN:** O atributo não-primo `data_aquisicao` depende simultaneamente da obra (`id_obra`) e do número sequencial do exemplar dentro daquela obra (`numero_exemplar`), pois cópias físicas distintas de um mesmo livro podem ser adquiridas pela biblioteca em datas diferentes, e o exemplar de número `1` repete-se em diferentes obras. Logo, não há dependência parcial e `EXEMPLAR` está na **2FN**.
+
+### 3.3. Análise das Relações `All-Key` (`TELEFONE_PESSOA`, `PRE_REQUISITO`, `AUTORIA`)
+* **Esquemas:**
+  * **TELEFONE_PESSOA** (<u>id_pessoa</u>, <u>telefone</u>)
+  * **PRE_REQUISITO** (<u>id_disciplina</u>, <u>id_disciplina_req</u>)
+  * **AUTORIA** (<u>id_obra</u>, <u>id_autor</u>)
+* **Justificativa:** Como não possuem nenhum atributo não-primo (todos os atributos compõem a chave primária composta), não pode haver dependência parcial ou transitiva de atributos não-primos. Encontram-se automaticamente em **2FN, 3FN e FNBC**.
 
 ---
 
 ## 4. Terceira Forma Normal (3FN)
-**Definição:** Uma relação está na 3FN se está na 2FN e nenhum atributo não-primo é transitivamente dependente da chave primária (ou seja, não existem dependências $X \rightarrow Y \rightarrow Z$ onde $X$ é a chave, $Y$ não é superchave e $Z$ é um atributo não-primo).
 
-### 4.1. Análise e Decomposição em `CURSO` e `ALUNO` (RN02)
-* **Cenário Preliminar (2FN):** Suponha que a tabela `ALUNO` armazene o curso e o departamento ao qual o aluno está vinculado:
-  $$\text{ALUNO\_2FN}(\underline{\text{id\_pessoa}}, \text{matricula\_academica}, \text{ano\_ingresso}, \text{id\_curso}, \text{nome\_curso}, \text{id\_departamento}, \text{sigla\_depto})$$
-* **Dependências Funcionais:**
-  * $\text{id\_pessoa} \rightarrow \text{id\_curso}$
-  * $\text{id\_curso} \rightarrow \{\text{nome\_curso}, \text{id\_departamento}\}$
-  * $\text{id\_departamento} \rightarrow \text{sigla\_depto}$
-* **Violação de 3FN:** Existem dependências transitivas ($\text{id\_pessoa} \rightarrow \text{id\_curso} \rightarrow \text{id\_departamento} \rightarrow \text{sigla\_depto}$). Se um curso mudar de nome, atualizaríamos múltiplos alunos (anomalia de atualização).
-* **Decomposição para 3FN:**
-  * $\text{DEPARTAMENTO}(\underline{\text{id\_departamento}}, \text{sigla}, \text{nome}, \text{id\_prof\_chefe})$
-  * $\text{CURSO}(\underline{\text{id\_curso}}, \text{codigo\_curso}, \text{nome}, \text{carga\_horaria\_total}, \text{id\_departamento})$
-  * $\text{ALUNO}(\underline{\text{id\_pessoa}}, \text{matricula\_academica}, \text{ano\_ingresso}, \text{id\_curso})$
+**Definição:** Uma relação está na **3FN** se está na 2FN e nenhum atributo não-primo é transitivamente dependente da chave primária (ausência de cadeias `X → Y → Z`, onde `X` é chave, `Y` não é superchave e `Z` é atributo não-primo).
 
-### 4.2. Decisão Arquitetural sobre `situacao_final` em `MATRICULA` (Alerta 1.11.2 do Minimundo e RN08)
-* **Problema Teórico:** Pela RN08, a situação de aprovação (`APROVADO`, `REPROVADO_NOTA`, `REPROVADO_FALTA`) é determinada por `nota_final` e `frequencia`. Logo, na tabela `MATRICULA`:
-  $$\text{id\_matricula} \rightarrow \{\text{nota\_final}, \text{frequencia}\} \rightarrow \text{situacao\_final}$$
-  Isso configura uma dependência transitiva (atributo derivado).
-* **Solução Adotada para Conformidade Estrita com 3FN/FNBC:**
-  1. Na tabela `MATRICULA`, armazenamos o atributo `status_matricula` restrito ao estado operacional do vínculo (`CURSANDO`, `CONCLUIDA`, `TRANCADA`), que **não** depende de nota ou frequência.
-  2. A situação pedagógica final (`APROVADO`, `REPROVADO_NOTA`, `REPROVADO_FALTA`, `TRANCADO`, `EM_CURSO`) é calculada dinamicamente na camada de visões (`VW_HISTORICO_ACADEMICO`) ou coluna virtual (`GENERATED ALWAYS AS`), eliminando 100% da anomalia de atualização e mantendo a tabela `MATRICULA` estritamente em **3FN e FNBC**.
+### 4.1. Eliminação de Dependências Transitivas entre `ALUNO`, `CURSO` e `DEPARTAMENTO` (R1 e R3)
+* **Cenário Preliminar com Violação de 3FN:**
+  Se os dados do curso e do departamento estivessem embutidos em `ALUNO`:
+  * **ALUNO_2FN** (<u>id_pessoa</u>, matricula, data_ingresso, id_curso, nome_curso, id_departamento, nome_departamento, sigla_departamento)
+* **Cadeia Transitiva:**
+  * `id_pessoa → id_curso → {nome_curso, id_departamento} → {nome_departamento, sigla_departamento}`
+* **Decomposição em 3FN aplicada no SIGAB:**
+  * **DEPARTAMENTO** (<u>id_departamento</u>, nome, sigla)
+  * **CURSO** (<u>id_curso</u>, nome, carga_horaria, id_departamento)
+  * **ALUNO** (<u>id_pessoa</u>, matricula, data_ingresso, id_curso)
 
-### 4.3. Decisão Arquitetural sobre `vagas_ocupadas` em `TURMA` (Alerta 1.11.3 do Minimundo e RN04)
-* **Problema Teórico:** O número de vagas ocupadas é derivado da contagem de registros ativos em `MATRICULA`.
-* **Solução Adotada:** A tabela `TURMA` armazena `vagas_total` (dependência direta $\text{id\_turma} \rightarrow \text{vagas\_total}$). Para viabilizar o requisito de controle de concorrência com `SELECT ... FOR UPDATE` na linha da turma (Issue #12) e validação imediata via Trigger (Issue #11), mantém-se `vagas_ocupadas` controlada exclusivamente por trigger transacional (`TRG_CONTROLE_VAGAS_MATRICULA`), documentando-se formalmente essa decisão de projeto físico para garantia de isolamento concorrente no Oracle.
+### 4.2. Eliminação de Redundâncias e Atributos Derivados (`TURMA` e `EXEMPLAR`)
+Conforme documentado na Etapa 2 (`Levantamento_DER`, Seção 3):
+1. **Ausência de `vagas_ocupadas` em `TURMA`:** O modelo armazena apenas `vagas_total` (`id_turma → vagas_total`). A ocupação atual é obtida por contagem das matrículas ativas da turma, evitando redundância e anomalias de atualização.
+2. **Ausência de `disponivel` em `EXEMPLAR`:** O status de disponibilidade de um exemplar não é armazenado estaticamente em `EXEMPLAR`; ele é verificado pela ausência de registro em `EMPRESTIMO` com `data_devolucao IS NULL` para aquele exemplar (RN10), mantendo `EXEMPLAR` livre de anomalias transitivas.
 
-### 4.4. Análise de `EMPRESTIMO` e `MULTA` (RN12 e RN13)
-* **Empréstimo:** $\text{EMPRESTIMO}(\underline{\text{id\_emprestimo}}, \text{id\_pessoa}, \text{id\_obra}, \text{num\_exemplar}, \text{data\_emprestimo}, \text{data\_prevista\_devolucao}, \text{data\_devolucao\_real})$
-  * A `data_prevista_devolucao` depende de `data_emprestimo` e do `tipo_pessoa` (RN12: +7 dias aluno, +15 dias professor). Como `tipo_pessoa` reside em `PESSOA` (outra relação), não há dependência transitiva interna na relação `EMPRESTIMO` que viole a 3FN, mas seu valor é fixado na inserção via Trigger para preservar o histórico caso a regra de prazo mude no futuro.
-* **Multa:** $\text{MULTA}(\underline{\text{id\_multa}}, \text{id\_emprestimo}, \text{valor\_multa}, \text{dias\_atraso}, \text{status\_pagamento}, \text{data\_geracao}, \text{data\_pagamento})$
-  * Relacionamento 1:1 opcional com `EMPRESTIMO` (`id_emprestimo` possui constraint `UNIQUE`). Todos os atributos dependem diretamente da chave `id_multa` e da chave candidata `id_emprestimo`. Encontra-se em **3FN**.
+### 4.3. Justificativa Formal do Atributo `situacao` em `MATRICULA` (RN08)
+* **Análise:** Na relação **MATRICULA** (<u>id_aluno</u>, <u>id_turma</u>, data_matricula, nota_final, frequencia, situacao), poder-se-ia questionar se `{nota_final, frequencia} → situacao` configuraria uma dependência transitiva.
+* **Prova de Conformidade com a 3FN:** Conforme documentado nas observações da Etapa 2, o domínio do atributo `situacao` compreende `{'CURSANDO', 'APROVADO', 'REPROVADO_NOTA', 'REPROVADO_FALTA', 'TRANCADO'}`. Como o estado `'TRANCADO'` (e `'CURSANDO'` com notas parciais) é um ato administrativo/acadêmico que independe dos valores numéricos de `nota_final` e `frequencia`, o par `{nota_final, frequencia}` **não determina funcionalmente** sozinho o atributo `situacao` em todos os estados possíveis. Portanto, `situacao` depende diretamente da chave `{id_aluno, id_turma}` (sendo validada por restrição `CHECK`/Trigger no fechamento), preservando a **3FN**.
 
 ---
 
-## 5. Forma Normal de Boyce-Codd (FNBC / BCNF)
-**Definição:** Uma relação está na FNBC se e somente se, para toda dependência funcional não-trivial $X \rightarrow Y$ válida na relação, o determinante $X$ é uma **superchave** da relação.
+## 5. Forma Normal de Boyce-Codd (FNBC / BCNF) e Catálogo de Dependências Funcionais
 
-### 5.1. Verificação de Chaves Candidatas Superpostas no Esquema SIGAB
-Avaliamos todas as relações do esquema em 3FN em busca de determinantes que não sejam superchaves:
+**Definição:** Uma relação está na **FNBC** se e somente se, para toda dependência funcional não-trivial `X → Y`, o determinante `X` é uma **superchave** da relação.
 
-| Relação | Chaves Candidatas (Superchaves Mínimas) | Dependências Funcionais Não-Triviais ($X \rightarrow Y$) | $X$ é Superchave? | Conformidade FNBC |
-|---|---|---|---|---|
-| `PESSOA` | $\{id\_pessoa\}$, $\{cpf\}$, $\{email\}$ | $id\_pessoa \rightarrow \text{todos}$; $cpf \rightarrow \text{todos}$; $email \rightarrow \text{todos}$ | Sim | **Sim (FNBC)** |
-| `TELEFONE_PESSOA` | $\{id\_pessoa, numero\_telefone\}$ | $\{id\_pessoa, numero\_telefone\} \rightarrow tipo\_telefone$ | Sim | **Sim (FNBC)** |
-| `DEPARTAMENTO` | $\{id\_departamento\}$, $\{sigla\}$, $\{id\_prof\_chefe\}$ | $id\_departamento \rightarrow \text{todos}$; $sigla \rightarrow \text{todos}$ | Sim | **Sim (FNBC)** |
-| `PROFESSOR` | $\{id\_pessoa\}$, $\{siape\}$ | $id\_pessoa \rightarrow \text{todos}$; $siape \rightarrow \text{todos}$ | Sim | **Sim (FNBC)** |
-| `CURSO` | $\{id\_curso\}$, $\{codigo\_curso\}$ | $id\_curso \rightarrow \text{todos}$; $codigo\_curso \rightarrow \text{todos}$ | Sim | **Sim (FNBC)** |
-| `ALUNO` | $\{id\_pessoa\}$, $\{matricula\_academica\}$ | $id\_pessoa \rightarrow \text{todos}$; $matricula\_academica \rightarrow \text{todos}$ | Sim | **Sim (FNBC)** |
-| `DISCIPLINA` | $\{id\_disciplina\}$, $\{codigo\_disc\}$ | $id\_disciplina \rightarrow \text{todos}$; $codigo\_disc \rightarrow \text{todos}$ | Sim | **Sim (FNBC)** |
-| `PREREQUISITO` | $\{id\_disciplina, id\_disciplina\_req\}$ | *(Apenas DFs triviais — relação toda chave)* | Sim | **Sim (FNBC)** |
-| `TURMA` | $\{id\_turma\}$, $\{id\_disciplina, semestre, codigo\_turma\}$ | $id\_turma \rightarrow \text{todos}$; $\{id\_disciplina, semestre, codigo\_turma\} \rightarrow \text{todos}$ | Sim | **Sim (FNBC)** |
-| `MATRICULA` | $\{id\_matricula\}$, $\{id\_aluno, id\_turma\}$ | $id\_matricula \rightarrow \text{todos}$; $\{id\_aluno, id\_turma\} \rightarrow \text{todos}$ | Sim | **Sim (FNBC)** |
-| `HISTORICO_NOTA_LOG`| $\{id\_log\}$ | $id\_log \rightarrow \text{todos}$ | Sim | **Sim (FNBC)** |
-| `OBRA` | $\{id\_obra\}$, $\{isbn\}$ | $id\_obra \rightarrow \text{todos}$; $isbn \rightarrow \text{todos}$ | Sim | **Sim (FNBC)** |
-| `AUTOR` | $\{id\_autor\}$ | $id\_autor \rightarrow \{\text{nome\_autor}, \text{nacionalidade}\}$ | Sim | **Sim (FNBC)** |
-| `AUTORIA` | $\{id\_obra, id\_autor\}$ | $\{id\_obra, id\_autor\} \rightarrow ordem\_autoria$ | Sim | **Sim (FNBC)** |
-| `EXEMPLAR` | $\{id\_obra, num\_exemplar\}$, $\{codigo\_barras\}$ | $\{id\_obra, num\_exemplar\} \rightarrow \text{todos}$; $codigo\_barras \rightarrow \text{todos}$ | Sim | **Sim (FNBC)** |
-| `EMPRESTIMO` | $\{id\_emprestimo\}$ | $id\_emprestimo \rightarrow \text{todos}$ | Sim | **Sim (FNBC)** |
-| `RESERVA` | $\{id\_reserva\}$ | $id\_reserva \rightarrow \text{todos}$ | Sim | **Sim (FNBC)** |
-| `MULTA` | $\{id\_multa\}$, $\{id\_emprestimo\}$ | $id\_multa \rightarrow \text{todos}$; $id\_emprestimo \rightarrow \text{todos}$ | Sim | **Sim (FNBC)** |
+A tabela a seguir consolida todas as Dependências Funcionais ($DF$) das 18 relações do esquema final e comprova que todo determinante à esquerda da seta é uma chave candidata (superchave mínima):
 
-**Conclusão do Memorial:** Todas as 18 relações que compõem o modelo relacional final do SIGAB encontram-se rigorosamente na **Forma Normal de Boyce-Codd (FNBC)**, garantindo ausência de redundâncias de dados e proteção contra anomalias de inserção, exclusão e atualização.
+| # | Relação | Chaves Candidatas (Superchaves) | Dependências Funcionais Não-Triviais (`X → Y`) | `X` é Superchave? | Forma Normal |
+|---|---|---|---|---|---|
+| 1 | `PESSOA` | `{id_pessoa}`, `{cpf}`, `{email}` | `id_pessoa → {cpf, nome, data_nascimento, email, rua, numero, bairro, cidade, cep, tipo_pessoa}`<br>`cpf → {id_pessoa, nome, ...}`<br>`email → {id_pessoa, nome, ...}` | Sim | **FNBC** |
+| 2 | `TELEFONE_PESSOA` | `{id_pessoa, telefone}` | *(Relação composta apenas pela chave — DFs triviais)* | Sim | **FNBC** |
+| 3 | `ALUNO` | `{id_pessoa}`, `{matricula}` | `id_pessoa → {matricula, data_ingresso, id_curso}`<br>`matricula → {id_pessoa, data_ingresso, id_curso}` | Sim | **FNBC** |
+| 4 | `PROFESSOR` | `{id_pessoa}` | `id_pessoa → {titulacao, data_admissao, id_departamento}` | Sim | **FNBC** |
+| 5 | `DEPARTAMENTO` | `{id_departamento}`, `{sigla}`, `{nome}` | `id_departamento → {nome, sigla}`<br>`sigla → {id_departamento, nome}`<br>`nome → {id_departamento, sigla}` | Sim | **FNBC** |
+| 6 | `CURSO` | `{id_curso}`, `{nome}` | `id_curso → {nome, carga_horaria, id_departamento}`<br>`nome → {id_curso, carga_horaria, id_departamento}` | Sim | **FNBC** |
+| 7 | `DISCIPLINA` | `{id_disciplina}`, `{codigo}` | `id_disciplina → {codigo, nome, carga_horaria, id_departamento}`<br>`codigo → {id_disciplina, nome, carga_horaria, id_departamento}` | Sim | **FNBC** |
+| 8 | `PRE_REQUISITO` | `{id_disciplina, id_disciplina_req}` | *(Relação composta apenas pela chave — DFs triviais)* | Sim | **FNBC** |
+| 9 | `TURMA` | `{id_turma}` | `id_turma → {semestre, vagas_total, sala, horario, id_disciplina, id_professor}` | Sim | **FNBC** |
+| 10 | `MATRICULA` | `{id_aluno, id_turma}` | `{id_aluno, id_turma} → {data_matricula, nota_final, frequencia, situacao}` | Sim | **FNBC** |
+| 11 | `AUDITORIA_NOTA` | `{id_auditoria}` | `id_auditoria → {id_aluno, id_turma, nota_anterior, nota_nova, data_alteracao, usuario}` | Sim | **FNBC** |
+| 12 | `OBRA` | `{id_obra}` | `id_obra → {titulo, tipo, ano_publicacao, editora}` | Sim | **FNBC** |
+| 13 | `AUTOR` | `{id_autor}` | `id_autor → {nome}` | Sim | **FNBC** |
+| 14 | `AUTORIA` | `{id_obra, id_autor}` | *(Relação composta apenas pela chave — DFs triviais)* | Sim | **FNBC** |
+| 15 | `EXEMPLAR` | `{id_obra, numero_exemplar}` | `{id_obra, numero_exemplar} → {data_aquisicao}` | Sim | **FNBC** |
+| 16 | `EMPRESTIMO` | `{id_emprestimo}` | `id_emprestimo → {id_pessoa, id_obra, numero_exemplar, data_emprestimo, data_prevista_devolucao, data_devolucao}` | Sim | **FNBC** |
+| 17 | `RESERVA` | `{id_reserva}` | `id_reserva → {id_pessoa, id_obra, data_reserva, situacao}` | Sim | **FNBC** |
+| 18 | `MULTA` | `{id_multa}`, `{id_emprestimo}` | `id_multa → {id_emprestimo, valor, data_geracao, data_pagamento}`<br>`id_emprestimo → {id_multa, valor, data_geracao, data_pagamento}` | Sim | **FNBC** |
+
+**Conclusão:** Todas as 18 relações mapeadas a partir do DER estão comprovadamente na **1FN, 2FN, 3FN e FNBC**, sem perda de informação e preservando todas as dependências funcionais do domínio.
