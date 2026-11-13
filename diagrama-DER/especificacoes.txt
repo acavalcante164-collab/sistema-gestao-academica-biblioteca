@@ -1,0 +1,9 @@
+LEGENDA:
+
+-Retângulo: entidade | Retângulo duplo: entidade fraca | Retângulo com losango: entidade associativa
+-Losango: relacionamento | Losango duplo: relacionamento identificador da entidade fraca
+-Elipse: atributo | Nome sublinhado: chave primária | Sublinhado tracejado: chave parcial
+-Elipse dupla: atributo multivalorado | Elipse ligada a outras elipses: atributo composto
+-Linha dupla: participação total (obrigatória) | Linha simples: participação parcial (opcional)
+-1, N, M: cardinalidade máxima, escrita ao lado da entidade (ex.: 1 DEPARTAMENTO oferta N CURSO)
+-Círculo d: especialização disjunta, com linha dupla até PESSOA (total)
