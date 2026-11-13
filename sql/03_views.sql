@@ -1,29 +1,31 @@
 -- ============================================================================
--- UNIVERSIDADE FEDERAL DE RORAIMA (UFRR) - DCC 502: BANCO DE DADOS I
--- PROJETO: Sistema Integrado de Gestão Acadêmica e Biblioteca (SIGAB) - Grupo 06
--- SCRIPT: 03_views.sql (Referência: Issue #10 e Seção 3.5.4 do Edital)
+-- PROJETO: Sistema Integrado de Gestão Acadêmica e Biblioteca (SIGAB)
+-- SCRIPT : 03_views.sql
+-- OBJETIVO: Criação das Visões Relacionais (Issue #10 e Seção 3.5.4 do Edital)
 -- ============================================================================
 
 -- ----------------------------------------------------------------------------
--- VIEW 1: VW_SITUACAO_ACADEMICA (Visão Analítica e de Segurança - WITH READ ONLY)
+-- 1. VISÃO ANALÍTICA E DE SEGURANÇA: VW_SITUACAO_ACADEMICA
 -- Finalidade:
---   1. Derivar dinamicamente a situação final da matrícula conforme a RN08
---      (Nota >= 6.0 e Frequência >= 75%), mantendo a tabela MATRICULA na 3FN/FNBC.
---   2. Proteger dados pessoais sensíveis de PESSOA (omite CPF, endereço e CEP).
---   3. Impedir operações DML diretas através da cláusula WITH READ ONLY.
+--   a) Fonte única da verdade para a Regra de Negócio RN08 (cálculo dinâmico
+--      de 'APROVADO', 'REPROVADO_NOTA', 'REPROVADO_FALTA', 'TRANCADO',
+--      'CURSANDO'), preservando a 3FN/FNBC na tabela física MATRICULA.
+--   b) Segurança: Oculta dados sensíveis de PESSOA (CPF, endereço e data de
+--      nascimento).
 -- ----------------------------------------------------------------------------
 CREATE OR REPLACE VIEW VW_SITUACAO_ACADEMICA AS
 SELECT
-    a.id_pessoa              AS id_aluno,
-    a.matricula              AS matricula_academica,
-    p.nome                   AS nome_aluno,
-    c.nome                   AS nome_curso,
-    d.sigla                  AS sigla_departamento,
-    disc.codigo              AS codigo_disciplina,
-    disc.nome                AS nome_disciplina,
+    m.id_aluno,
+    a.matricula AS matricula_academica,
+    p.nome AS nome_aluno,
+    c.id_curso,
+    c.nome AS nome_curso,
     t.id_turma,
     t.semestre,
-    p_prof.nome              AS nome_professor,
+    d.id_disciplina,
+    d.codigo AS codigo_disciplina,
+    d.nome AS nome_disciplina,
+    d.carga_horaria,
     m.data_matricula,
     m.nota_final,
     m.frequencia,
@@ -31,63 +33,24 @@ SELECT
     CASE
         WHEN m.status_matricula = 'TRANCADA' THEN 'TRANCADO'
         WHEN m.nota_final IS NULL OR m.frequencia IS NULL THEN 'CURSANDO'
-        WHEN m.frequencia < 75.0 THEN 'REPROVADO_FALTA'
+        WHEN m.frequencia < 75 THEN 'REPROVADO_FALTA'
         WHEN m.nota_final >= 6.0 THEN 'APROVADO'
         ELSE 'REPROVADO_NOTA'
-    END                      AS situacao_final_calculada
+    END AS situacao_final_calculada
 FROM MATRICULA m
-JOIN ALUNO a            ON m.id_aluno = a.id_pessoa
-JOIN PESSOA p           ON a.id_pessoa = p.id_pessoa
-JOIN CURSO c            ON a.id_curso = c.id_curso
-JOIN TURMA t            ON m.id_turma = t.id_turma
-JOIN DISCIPLINA disc    ON t.id_disciplina = disc.id_disciplina
-JOIN DEPARTAMENTO d     ON disc.id_departamento = d.id_departamento
-LEFT JOIN PROFESSOR pr  ON t.id_professor = pr.id_pessoa
-LEFT JOIN PESSOA p_prof ON pr.id_pessoa = p_prof.id_pessoa
+INNER JOIN ALUNO a      ON a.id_pessoa = m.id_aluno
+INNER JOIN PESSOA p     ON p.id_pessoa = a.id_pessoa
+INNER JOIN CURSO c      ON c.id_curso = a.id_curso
+INNER JOIN TURMA t      ON t.id_turma = m.id_turma
+INNER JOIN DISCIPLINA d ON d.id_disciplina = t.id_disciplina
 WITH READ ONLY;
 
 -- ----------------------------------------------------------------------------
--- VIEW 2: VW_ACERVO_PENDENCIAS (Visão Gerencial da Biblioteca - WITH READ ONLY)
+-- 2. VISÃO COM PROTEÇÃO DE ESCRITA: VW_MATRICULAS_ATIVAS
 -- Finalidade:
---   Listar todos os empréstimos em atraso ou com multa pendente, exibindo os
---   dias de atraso calculados e o status de bloqueio do usuário (RN13 e RN14).
--- ----------------------------------------------------------------------------
-CREATE OR REPLACE VIEW VW_ACERVO_PENDENCIAS AS
-SELECT
-    e.id_emprestimo,
-    p.id_pessoa,
-    p.nome                                                              AS nome_usuario,
-    DECODE(p.tipo_pessoa, 'A', 'ALUNO', 'P', 'PROFESSOR')               AS perfil_usuario,
-    p.email,
-    o.id_obra,
-    o.titulo                                                            AS titulo_obra,
-    e.numero_exemplar,
-    e.data_emprestimo,
-    e.data_prevista_devolucao,
-    e.data_devolucao,
-    GREATEST(0, TRUNC(NVL(e.data_devolucao, SYSDATE)) - TRUNC(e.data_prevista_devolucao)) AS dias_atraso,
-    mu.id_multa,
-    NVL(mu.valor, 0)                                                    AS valor_multa_registrada,
-    mu.data_pagamento,
-    CASE
-        WHEN mu.id_multa IS NOT NULL AND mu.data_pagamento IS NULL THEN 'BLOQUEADO_MULTA_PENDENTE'
-        WHEN e.data_devolucao IS NULL AND TRUNC(SYSDATE) > TRUNC(e.data_prevista_devolucao) THEN 'EM_ATRASO_SEM_DEVOLUCAO'
-        ELSE 'REGULAR'
-    END                                                                 AS situacao_biblioteca
-FROM EMPRESTIMO e
-JOIN PESSOA p   ON e.id_pessoa = p.id_pessoa
-JOIN OBRA o     ON e.id_obra = o.id_obra
-LEFT JOIN MULTA mu ON e.id_emprestimo = mu.id_emprestimo
-WHERE (mu.id_multa IS NOT NULL AND mu.data_pagamento IS NULL)
-   OR (e.data_devolucao IS NULL AND TRUNC(SYSDATE) > TRUNC(e.data_prevista_devolucao))
-WITH READ ONLY;
-
--- ----------------------------------------------------------------------------
--- VIEW 3: VW_MATRICULAS_ATIVAS (Visão com Proteção de Escrita - WITH CHECK OPTION)
--- Finalidade:
---   Expor apenas matrículas com vínculo ativo ('ATIVA') para lançamento de notas
---   e frequências, impedindo via WITH CHECK OPTION que registros inseridos ou
---   atualizados por esta view alterem o status para 'TRANCADA'.
+--   Expor matrículas com vínculo ativo ('ATIVA') e bloquear via cláusula
+--   WITH CHECK OPTION qualquer INSERT ou UPDATE através da view que tente
+--   definir status_matricula diferente de 'ATIVA'.
 -- ----------------------------------------------------------------------------
 CREATE OR REPLACE VIEW VW_MATRICULAS_ATIVAS AS
 SELECT
@@ -99,4 +62,47 @@ SELECT
     status_matricula
 FROM MATRICULA
 WHERE status_matricula = 'ATIVA'
-WITH CHECK OPTION CONSTRAINT CK_VW_MATRICULAS_ATIVAS;
+WITH CHECK OPTION CONSTRAINT CK_VW_MATRICULA_ATIVA;
+
+-- ----------------------------------------------------------------------------
+-- 3. VISÃO GERENCIAL DA BIBLIOTECA: VW_ACERVO_PENDENCIAS
+-- Finalidade:
+--   Consolidar empréstimos em aberto ou devolvidos com multa não quitada,
+--   calculando dias de atraso correntes e status de bloqueio (RN13 e RN14).
+-- ----------------------------------------------------------------------------
+CREATE OR REPLACE VIEW VW_ACERVO_PENDENCIAS AS
+SELECT
+    e.id_emprestimo,
+    p.id_pessoa,
+    p.nome AS nome_usuario,
+    CASE p.tipo_pessoa
+        WHEN 'A' THEN 'ALUNO'
+        WHEN 'P' THEN 'PROFESSOR'
+    END AS perfil_usuario,
+    o.id_obra,
+    o.titulo AS titulo_obra,
+    e.numero_exemplar,
+    e.data_emprestimo,
+    e.data_prevista_devolucao,
+    e.data_devolucao,
+    CASE
+        WHEN e.data_devolucao IS NULL AND TRUNC(SYSDATE) > TRUNC(e.data_prevista_devolucao)
+            THEN TRUNC(SYSDATE) - TRUNC(e.data_prevista_devolucao)
+        WHEN e.data_devolucao IS NOT NULL AND TRUNC(e.data_devolucao) > TRUNC(e.data_prevista_devolucao)
+            THEN TRUNC(e.data_devolucao) - TRUNC(e.data_prevista_devolucao)
+        ELSE 0
+    END AS dias_atraso,
+    mu.id_multa,
+    NVL(mu.valor, 0) AS valor_multa_registrada,
+    CASE
+        WHEN mu.id_multa IS NOT NULL AND mu.data_pagamento IS NULL THEN 'BLOQUEADO_MULTA_PENDENTE'
+        WHEN e.data_devolucao IS NULL AND TRUNC(SYSDATE) > TRUNC(e.data_prevista_devolucao) THEN 'EM_ATRASO_SEM_DEVOLUCAO'
+        ELSE 'REGULAR_EM_ABERTO'
+    END AS situacao_bibliotecaria
+FROM EMPRESTIMO e
+INNER JOIN PESSOA p ON p.id_pessoa = e.id_pessoa
+INNER JOIN OBRA o   ON o.id_obra = e.id_obra
+LEFT JOIN MULTA mu  ON mu.id_emprestimo = e.id_emprestimo
+WHERE e.data_devolucao IS NULL
+   OR (mu.id_multa IS NOT NULL AND mu.data_pagamento IS NULL)
+WITH READ ONLY;

@@ -1,240 +1,292 @@
 -- ============================================================================
--- UNIVERSIDADE FEDERAL DE RORAIMA (UFRR) - DCC 502: BANCO DE DADOS I
--- PROJETO: Sistema Integrado de Gestão Acadêmica e Biblioteca (SIGAB) - Grupo 06
--- SCRIPT: 05_consultas_analiticas.sql (Referência: Issue #9 e Seção 3.5 do Edital)
+-- PROJETO: Sistema Integrado de Gestão Acadêmica e Biblioteca (SIGAB)
+-- SCRIPT : 05_consultas_analiticas.sql
+-- OBJETIVO: 8 Consultas Analíticas Avançadas (Issue #9 e Seção 3.5 do Edital)
 -- ============================================================================
 
 -- ----------------------------------------------------------------------------
--- CONSULTA 01 (Requisito 3.5.1 - INNER JOIN múltiplo + GROUP BY + HAVING)
--- Objetivo de Negócio:
---   Identificar o índice de reprovação por falta e a média geral de notas por
---   disciplina e semestre, filtrando disciplinas que possuem matrículas avaliadas.
+-- CONSULTA 01 (Q01): Taxa de Reprovação por Falta e por Nota nas Disciplinas
+-- Requisito Técnico: Junções múltiplas + GROUP BY + HAVING (COUNT(*) >= 3).
+-- Objetivo de Negócio: Responder à questão gerencial da Seção 1.2 do minimundo
+--                      utilizando a fonte única da RN08 (VW_SITUACAO_ACADEMICA).
 -- ----------------------------------------------------------------------------
 SELECT
-    dep.sigla                                                       AS departamento,
-    d.codigo                                                        AS cod_disciplina,
-    d.nome                                                          AS disciplina,
-    t.semestre,
-    COUNT(m.id_aluno)                                               AS total_matriculados,
-    ROUND(AVG(m.nota_final), 2)                                     AS media_notas,
-    ROUND(AVG(m.frequencia), 2)                                     AS media_frequencia,
-    SUM(CASE WHEN m.frequencia < 75.0 THEN 1 ELSE 0 END)            AS qtd_reprovados_falta,
-    SUM(CASE WHEN m.frequencia >= 75.0 AND m.nota_final >= 6.0 THEN 1 ELSE 0 END) AS qtd_aprovados
-FROM DEPARTAMENTO dep
-INNER JOIN DISCIPLINA d ON dep.id_departamento = d.id_departamento
-INNER JOIN TURMA t      ON d.id_disciplina = t.id_disciplina
-INNER JOIN MATRICULA m  ON t.id_turma = m.id_turma
-WHERE m.status_matricula = 'ATIVA'
-  AND m.nota_final IS NOT NULL
-GROUP BY dep.sigla, d.codigo, d.nome, t.semestre
-HAVING COUNT(m.id_aluno) >= 1
-ORDER BY qtd_reprovados_falta DESC, media_notas ASC;
+    dep.sigla AS departamento,
+    vw.codigo_disciplina,
+    vw.nome_disciplina,
+    COUNT(*) AS total_matriculas,
+    SUM(CASE WHEN vw.situacao_final_calculada = 'APROVADO' THEN 1 ELSE 0 END) AS qtd_aprovados,
+    SUM(CASE WHEN vw.situacao_final_calculada = 'REPROVADO_FALTA' THEN 1 ELSE 0 END) AS qtd_reprov_falta,
+    SUM(CASE WHEN vw.situacao_final_calculada = 'REPROVADO_NOTA' THEN 1 ELSE 0 END) AS qtd_reprov_nota,
+    ROUND(
+        SUM(CASE WHEN vw.situacao_final_calculada IN ('REPROVADO_FALTA', 'REPROVADO_NOTA') THEN 1 ELSE 0 END)
+        * 100.0 / COUNT(*), 2
+    ) AS percentual_reprovacao
+FROM VW_SITUACAO_ACADEMICA vw
+INNER JOIN DISCIPLINA d     ON d.id_disciplina = vw.id_disciplina
+INNER JOIN DEPARTAMENTO dep ON dep.id_departamento = d.id_departamento
+GROUP BY dep.sigla, vw.codigo_disciplina, vw.nome_disciplina
+HAVING COUNT(*) >= 3
+ORDER BY percentual_reprovacao DESC, qtd_reprov_falta DESC;
 
 -- ----------------------------------------------------------------------------
--- CONSULTA 02 (Requisito 3.5.1 - LEFT OUTER JOIN múltiplo)
--- Objetivo de Negócio:
---   Mapear o giro de todo o acervo bibliográfico (obras, quantidade de exemplares
---   físicos cadastrados e total de empréstimos históricos), exibindo inclusive
---   obras recém-catalogadas que ainda não tiveram exemplares ou empréstimos.
+-- CONSULTA 02 (Q02): Giro de Acervo Completo (Incluindo Autores e Obras sem Uso)
+-- Requisito Técnico: Junções Múltiplas com INNER JOIN e LEFT OUTER JOIN
+--                    envolvendo OBRA, AUTORIA, AUTOR, EXEMPLAR, EMPRESTIMO e RESERVA.
+-- Objetivo de Negócio: Mapear a demanda de todas as obras do catálogo com seus
+--                      respectivos autores, inclusive títulos recém-adquiridos.
 -- ----------------------------------------------------------------------------
+WITH CTE_AUTORES_OBRA AS (
+    SELECT
+        au_rel.id_obra,
+        LISTAGG(a.nome, '; ') WITHIN GROUP (ORDER BY a.nome) AS autores
+    FROM AUTORIA au_rel
+    INNER JOIN AUTOR a ON a.id_autor = au_rel.id_autor
+    GROUP BY au_rel.id_obra
+),
+CTE_RESERVAS_OBRA AS (
+    SELECT
+        id_obra,
+        COUNT(*) AS total_reservas_ativas
+    FROM RESERVA
+    WHERE situacao = 'ATIVA'
+    GROUP BY id_obra
+)
 SELECT
     o.id_obra,
     o.titulo,
-    o.tipo                                          AS tipo_material,
-    o.editora,
-    COUNT(DISTINCT ex.numero_exemplar)              AS qtd_exemplares_fisicos,
-    COUNT(emp.id_emprestimo)                        AS total_emprestimos_realizados,
-    SUM(CASE WHEN emp.id_emprestimo IS NOT NULL AND emp.data_devolucao IS NULL THEN 1 ELSE 0 END) AS exemplares_atualmente_emprestados
+    o.tipo,
+    NVL(aut.autores, 'Sem autor vinculado') AS autores,
+    COUNT(DISTINCT ex.numero_exemplar) AS qtd_exemplares_fisicos,
+    COUNT(DISTINCT e.id_emprestimo) AS total_emprestimos_historico,
+    NVL(res.total_reservas_ativas, 0) AS reservas_ativas_fila
 FROM OBRA o
-LEFT OUTER JOIN EXEMPLAR ex    ON o.id_obra = ex.id_obra
-LEFT OUTER JOIN EMPRESTIMO emp ON ex.id_obra = emp.id_obra
-                              AND ex.numero_exemplar = emp.numero_exemplar
-GROUP BY o.id_obra, o.titulo, o.tipo, o.editora
-ORDER BY total_emprestimos_realizados DESC, o.titulo ASC;
+LEFT OUTER JOIN CTE_AUTORES_OBRA aut  ON aut.id_obra = o.id_obra
+LEFT OUTER JOIN EXEMPLAR ex           ON ex.id_obra = o.id_obra
+LEFT OUTER JOIN EMPRESTIMO e          ON e.id_obra = ex.id_obra
+                                     AND e.numero_exemplar = ex.numero_exemplar
+LEFT OUTER JOIN CTE_RESERVAS_OBRA res ON res.id_obra = o.id_obra
+GROUP BY o.id_obra, o.titulo, o.tipo, aut.autores, res.total_reservas_ativas
+ORDER BY total_emprestimos_historico DESC, reservas_ativas_fila DESC;
 
 -- ----------------------------------------------------------------------------
--- CONSULTA 03 (Requisito 3.5.2 - Subconsulta Independente com Operador ALL e IN)
--- Objetivo de Negócio:
---   Listar os alunos de destaque cujo Coeficiente de Rendimento (média das notas)
---   é maior ou igual à média geral de TODOS os cursos de graduação com carga
---   horária mínima de 3000 horas.
+-- CONSULTA 03 (Q03): Alunos de Cursos de Alta Carga Horária (>= 3000h) com
+--                    Desempenho Superior a Todas as Médias de Turmas de um Depto
+-- Requisito Técnico: Subconsulta independente com operadores de conjunto IN e ALL.
+-- Objetivo de Negócio: Identificar alunos de destaque elegíveis a bolsas de
+--                      monitoria/iniciação científica em cursos com CH >= 3000h.
 -- ----------------------------------------------------------------------------
 SELECT
-    a.matricula                 AS matricula_academica,
-    p.nome                      AS nome_aluno,
-    c.nome                      AS curso,
-    COUNT(m.id_turma)           AS disciplinas_avaliadas,
-    ROUND(AVG(m.nota_final), 2) AS media_geral_aluno
+    p.nome AS nome_aluno,
+    a.matricula,
+    c.nome AS nome_curso,
+    c.carga_horaria AS ch_curso,
+    ROUND(AVG(m.nota_final), 2) AS media_global_aluno
 FROM ALUNO a
-INNER JOIN PESSOA p    ON a.id_pessoa = p.id_pessoa
-INNER JOIN CURSO c     ON a.id_curso = c.id_curso
-INNER JOIN MATRICULA m ON a.id_pessoa = m.id_aluno
+INNER JOIN PESSOA p    ON p.id_pessoa = a.id_pessoa
+INNER JOIN CURSO c     ON c.id_curso = a.id_curso
+INNER JOIN MATRICULA m ON m.id_aluno = a.id_pessoa
 WHERE m.nota_final IS NOT NULL
-  AND c.id_curso IN (
-      SELECT c_sub.id_curso
-        FROM CURSO c_sub
-       WHERE c_sub.carga_horaria >= 2400
+  AND a.id_curso IN (
+      SELECT sub_c.id_curso
+        FROM CURSO sub_c
+       WHERE sub_c.carga_horaria >= 3000
   )
-GROUP BY a.matricula, p.nome, c.nome
+GROUP BY p.nome, a.matricula, c.nome, c.carga_horaria
 HAVING AVG(m.nota_final) >= ALL (
     SELECT AVG(m2.nota_final)
       FROM MATRICULA m2
-      INNER JOIN ALUNO a2 ON m2.id_aluno = a2.id_pessoa
+      INNER JOIN TURMA t2      ON t2.id_turma = m2.id_turma
+      INNER JOIN DISCIPLINA d2 ON d2.id_disciplina = t2.id_disciplina
      WHERE m2.nota_final IS NOT NULL
-     GROUP BY a2.id_curso
+     GROUP BY d2.id_departamento
 )
-ORDER BY media_geral_aluno DESC;
+ORDER BY media_global_aluno DESC;
 
 -- ----------------------------------------------------------------------------
--- CONSULTA 04 (Requisito 3.5.3 - Subconsulta Correlacionada com EXISTS)
--- Objetivo de Negócio:
---   Identificar todos os usuários (alunos e professores) que estão impedidos de
---   novos empréstimos por possuírem ao menos uma multa pendente de pagamento (RN14).
+-- CONSULTA 04 (Q04): Alunos com Matrícula Ativa no Semestre e Bloqueados na
+--                    Biblioteca por Multa Pendente
+-- Requisito Técnico: Subconsulta Correlacionada utilizando EXISTS.
+-- Objetivo de Negócio: Demonstrar a integração entre Secretaria Acadêmica e
+--                      Biblioteca através da entidade PESSOA (Seção 1.1).
 -- ----------------------------------------------------------------------------
 SELECT
-    p.id_pessoa,
-    p.cpf,
-    p.nome,
-    DECODE(p.tipo_pessoa, 'A', 'ALUNO', 'P', 'PROFESSOR') AS categoria,
-    p.email
-FROM PESSOA p
+    a.id_pessoa,
+    a.matricula AS matricula_academica,
+    p.nome AS nome_aluno,
+    p.email,
+    c.nome AS curso
+FROM ALUNO a
+INNER JOIN PESSOA p ON p.id_pessoa = a.id_pessoa
+INNER JOIN CURSO c  ON c.id_curso = a.id_curso
 WHERE EXISTS (
     SELECT 1
+      FROM MATRICULA m
+     WHERE m.id_aluno = a.id_pessoa
+       AND m.status_matricula = 'ATIVA'
+)
+AND EXISTS (
+    SELECT 1
       FROM EMPRESTIMO e
-      INNER JOIN MULTA mu ON e.id_emprestimo = mu.id_emprestimo
-     WHERE e.id_pessoa = p.id_pessoa
+      INNER JOIN MULTA mu ON mu.id_emprestimo = e.id_emprestimo
+     WHERE e.id_pessoa = a.id_pessoa
        AND mu.data_pagamento IS NULL
 )
 ORDER BY p.nome;
 
 -- ----------------------------------------------------------------------------
--- CONSULTA 05 (Requisito 3.5.3 - Subconsulta Correlacionada com NOT EXISTS)
--- Objetivo de Negócio:
---   Relacionar quais alunos já cumpriram TODOS os pré-requisitos de uma disciplina
---   que exige pré-requisito (Divisão Relacional via dupla negação com NOT EXISTS),
---   mas ainda não se matricularam nela com aprovação.
+-- CONSULTA 05 (Q05): Alunos Aptos a Cursar Disciplinas com Pré-requisitos
+--                    (Todos os Pré-requisitos Cumpridos, mas Disciplina Não Cursada)
+-- Requisito Técnico: Subconsulta Correlacionada com Duplo NOT EXISTS (Divisão
+--                    Relacional) consultando VW_SITUACAO_ACADEMICA (RN08).
+-- Objetivo de Negócio: Planejamento de oferta de vagas para o próximo semestre.
 -- ----------------------------------------------------------------------------
 SELECT
-    a.matricula         AS matricula_aluno,
-    p.nome              AS nome_aluno,
-    d_alvo.codigo       AS cod_disciplina_liberada,
-    d_alvo.nome         AS disciplina_liberada
+    a.matricula AS matricula_aluno,
+    p.nome AS nome_aluno,
+    d.codigo AS cod_disciplina_liberada,
+    d.nome AS disciplina_liberada
 FROM ALUNO a
-INNER JOIN PESSOA p      ON a.id_pessoa = p.id_pessoa
-CROSS JOIN DISCIPLINA d_alvo
+INNER JOIN PESSOA p     ON p.id_pessoa = a.id_pessoa
+INNER JOIN CURSO c      ON c.id_curso = a.id_curso
+INNER JOIN DISCIPLINA d ON d.id_departamento = c.id_departamento
 WHERE EXISTS (
-    -- A disciplina alvo deve possuir pelo menos um pré-requisito cadastrado
+    -- Garante que a disciplina avaliada possui pelo menos 1 pré-requisito
     SELECT 1
       FROM PRE_REQUISITO pr_check
-     WHERE pr_check.id_disciplina = d_alvo.id_disciplina
+     WHERE pr_check.id_disciplina = d.id_disciplina
 )
 AND NOT EXISTS (
-    -- Não pode existir nenhum pré-requisito da disciplina alvo que o aluno NÃO tenha aprovado
+    -- Não existe nenhum pré-requisito desta disciplina que o aluno NÃO tenha sido APROVADO
     SELECT 1
       FROM PRE_REQUISITO pr
-     WHERE pr.id_disciplina = d_alvo.id_disciplina
+     WHERE pr.id_disciplina = d.id_disciplina
        AND NOT EXISTS (
            SELECT 1
-             FROM MATRICULA m
-             INNER JOIN TURMA t ON m.id_turma = t.id_turma
-            WHERE m.id_aluno = a.id_pessoa
-              AND t.id_disciplina = pr.id_disciplina_req
-              AND m.status_matricula = 'ATIVA'
-              AND m.nota_final >= 6.0
-              AND m.frequencia >= 75.0
+             FROM VW_SITUACAO_ACADEMICA vw
+            WHERE vw.id_aluno = a.id_pessoa
+              AND vw.id_disciplina = pr.id_disciplina_req
+              AND vw.situacao_final_calculada = 'APROVADO'
        )
 )
 AND NOT EXISTS (
-    -- E o aluno ainda não foi aprovado na própria disciplina alvo
+    -- E o aluno ainda não está cursando nem foi aprovado na disciplina-alvo
     SELECT 1
-      FROM MATRICULA m_ja
-      INNER JOIN TURMA t_ja ON m_ja.id_turma = t_ja.id_turma
-     WHERE m_ja.id_aluno = a.id_pessoa
-       AND t_ja.id_disciplina = d_alvo.id_disciplina
-       AND m_ja.status_matricula = 'ATIVA'
-       AND m_ja.nota_final >= 6.0
-       AND m_ja.frequencia >= 75.0
+      FROM VW_SITUACAO_ACADEMICA vw_alvo
+     WHERE vw_alvo.id_aluno = a.id_pessoa
+       AND vw_alvo.id_disciplina = d.id_disciplina
+       AND vw_alvo.situacao_final_calculada IN ('APROVADO', 'CURSANDO')
 )
-ORDER BY p.nome, d_alvo.codigo;
+ORDER BY d.codigo, p.nome;
 
 -- ----------------------------------------------------------------------------
--- CONSULTA 06 (Requisito 3.5.5 - Window Functions com OVER: DENSE_RANK e LAG)
--- Objetivo de Negócio:
---   Classificar os alunos dentro de cada curso pelo seu Coeficiente de Rendimento
---   (média das notas finais), exibindo a posição no ranking (DENSE_RANK) e a
---   diferença de nota para o aluno imediatamente acima (LAG).
+-- CONSULTA 06 (Q06): Ranking de Desempenho dos Alunos por Curso e Diferença
+--                    para o Colocado Anterior
+-- Requisito Técnico: Window Functions com cláusula OVER() (DENSE_RANK, LAG, AVG).
+-- Objetivo de Negócio: Classificar os alunos dentro de cada curso pela média
+--                      geral e comparar com a média do próprio curso.
 -- ----------------------------------------------------------------------------
-WITH resumo_rendimento AS (
+WITH CTE_MEDIA_ALUNO AS (
     SELECT
+        a.id_pessoa,
+        a.matricula,
+        p.nome AS nome_aluno,
         c.id_curso,
-        c.nome                      AS nome_curso,
-        a.id_pessoa                 AS id_aluno,
-        a.matricula                 AS matricula_academica,
-        p.nome                      AS nome_aluno,
-        COUNT(m.id_turma)           AS qtd_turmas_avaliadas,
-        ROUND(AVG(m.nota_final), 2) AS cr_medio
+        c.nome AS nome_curso,
+        ROUND(AVG(m.nota_final), 2) AS media_aluno
     FROM ALUNO a
-    INNER JOIN PESSOA p    ON a.id_pessoa = p.id_pessoa
-    INNER JOIN CURSO c     ON a.id_curso = c.id_curso
-    INNER JOIN MATRICULA m ON a.id_pessoa = m.id_aluno
+    INNER JOIN PESSOA p    ON p.id_pessoa = a.id_pessoa
+    INNER JOIN CURSO c     ON c.id_curso = a.id_curso
+    INNER JOIN MATRICULA m ON m.id_aluno = a.id_pessoa
     WHERE m.nota_final IS NOT NULL
-    GROUP BY c.id_curso, c.nome, a.id_pessoa, a.matricula, p.nome
+    GROUP BY a.id_pessoa, a.matricula, p.nome, c.id_curso, c.nome
 )
 SELECT
     nome_curso,
-    DENSE_RANK() OVER (PARTITION BY id_curso ORDER BY cr_medio DESC) AS ranking_no_curso,
-    matricula_academica,
+    matricula,
     nome_aluno,
-    qtd_turmas_avaliadas,
-    cr_medio,
-    LAG(cr_medio, 1) OVER (PARTITION BY id_curso ORDER BY cr_medio DESC) AS cr_colocado_anterior,
-    ROUND(
-        cr_medio - LAG(cr_medio, 1) OVER (PARTITION BY id_curso ORDER BY cr_medio DESC),
-        2
-    ) AS diferenca_para_anterior
-FROM resumo_rendimento
-ORDER BY nome_curso, ranking_no_curso, nome_aluno;
+    media_aluno,
+    DENSE_RANK() OVER (
+        PARTITION BY id_curso
+        ORDER BY media_aluno DESC
+    ) AS posicao_ranking_curso,
+    ROUND(AVG(media_aluno) OVER (PARTITION BY id_curso), 2) AS media_geral_do_curso,
+    NVL(
+        media_aluno - LAG(media_aluno, 1) OVER (
+            PARTITION BY id_curso
+            ORDER BY media_aluno DESC
+        ), 0
+    ) AS diferenca_para_colocado_acima
+FROM CTE_MEDIA_ALUNO
+ORDER BY nome_curso, posicao_ranking_curso, nome_aluno;
 
 -- ----------------------------------------------------------------------------
--- CONSULTA 07 (Análise Financeira e de Inadimplência da Biblioteca por Perfil)
--- Objetivo de Negócio:
---   Comparar o comportamento de empréstimos, atrasos e multas entre Alunos e
---   Professores, apurando o montante total gerado, valor já pago e saldo devedor.
+-- CONSULTA 07 (Q07): Indicadores de Atraso, Média de Retenção e Multas por
+--                    Perfil de Usuário (Aluno vs. Professor)
+-- Requisito Técnico: Agregação Analítica com GROUP BY, CASE e funções estatísticas.
+-- Objetivo de Negócio: Avaliar o cumprimento dos prazos da RN12 (7/15 dias), a
+--                      média de dias de atraso e o volume financeiro de multas (RN13).
 -- ----------------------------------------------------------------------------
 SELECT
-    DECODE(p.tipo_pessoa, 'A', 'ALUNO', 'P', 'PROFESSOR')               AS perfil_usuario,
-    COUNT(DISTINCT p.id_pessoa)                                         AS qtd_usuarios_ativos,
-    COUNT(e.id_emprestimo)                                              AS total_emprestimos,
-    SUM(CASE WHEN mu.id_multa IS NOT NULL THEN 1 ELSE 0 END)            AS qtd_emprestimos_com_multa,
-    NVL(SUM(mu.valor), 0)                                               AS valor_total_multas,
-    NVL(SUM(CASE WHEN mu.data_pagamento IS NOT NULL THEN mu.valor ELSE 0 END), 0) AS valor_multas_pagas,
-    NVL(SUM(CASE WHEN mu.data_pagamento IS NULL THEN mu.valor ELSE 0 END), 0)     AS valor_multas_pendentes
+    CASE p.tipo_pessoa
+        WHEN 'A' THEN 'ALUNO (Prazo: 7 dias | Limite: 3)'
+        WHEN 'P' THEN 'PROFESSOR (Prazo: 15 dias | Limite: 5)'
+    END AS categoria_usuario,
+    COUNT(DISTINCT p.id_pessoa) AS qtd_usuarios_ativos,
+    COUNT(e.id_emprestimo) AS total_emprestimos,
+    ROUND(AVG(
+        CASE
+            WHEN e.data_devolucao IS NOT NULL AND TRUNC(e.data_devolucao) > TRUNC(e.data_prevista_devolucao)
+                THEN TRUNC(e.data_devolucao) - TRUNC(e.data_prevista_devolucao)
+            WHEN e.data_devolucao IS NULL AND TRUNC(SYSDATE) > TRUNC(e.data_prevista_devolucao)
+                THEN TRUNC(SYSDATE) - TRUNC(e.data_prevista_devolucao)
+            ELSE 0
+        END
+    ), 2) AS media_dias_atraso,
+    COUNT(mu.id_multa) AS qtd_multas_geradas,
+    NVL(SUM(mu.valor), 0) AS montante_total_multas_rs,
+    NVL(SUM(CASE WHEN mu.data_pagamento IS NULL THEN mu.valor ELSE 0 END), 0) AS montante_pendente_rs
 FROM PESSOA p
-INNER JOIN EMPRESTIMO e ON p.id_pessoa = e.id_pessoa
-LEFT OUTER JOIN MULTA mu ON e.id_emprestimo = mu.id_emprestimo
+INNER JOIN EMPRESTIMO e ON e.id_pessoa = p.id_pessoa
+LEFT OUTER JOIN MULTA mu ON mu.id_emprestimo = e.id_emprestimo
 GROUP BY p.tipo_pessoa
-ORDER BY valor_multas_pendentes DESC;
+ORDER BY total_emprestimos DESC;
 
 -- ----------------------------------------------------------------------------
--- CONSULTA 08 (Gestão de Demanda Reprimida - Fila de Reservas vs Exemplares)
--- Objetivo de Negócio:
---   Listar as obras que possuem reservas ativas na fila de espera e verificar
---   quantos exemplares físicos cada obra possui no catálogo (apoio à aquisição).
+-- CONSULTA 08 (Q08): Fila Prioritária de Reservas Ativas por Obra com Posição
+--                    Cronológica (Apenas Obras sem Exemplares Disponíveis - RN15)
+-- Requisito Técnico: Window Function (ROW_NUMBER() OVER) + Subconsulta
+--                    Correlacionada com NOT EXISTS.
+-- Objetivo de Negócio: Orientar o bibliotecário sobre qual usuário deve ser
+--                      atendido primeiro para obras 100% emprestadas (RN15).
 -- ----------------------------------------------------------------------------
 SELECT
-    o.id_obra,
-    o.titulo,
-    o.tipo,
-    COUNT(DISTINCT r.id_reserva)        AS qtd_reservas_ativas,
-    MIN(r.data_reserva)                 AS reserva_mais_antiga,
-    (
-        SELECT COUNT(*)
-          FROM EXEMPLAR ex
-         WHERE ex.id_obra = o.id_obra
-    )                                   AS total_exemplares_catalogo
-FROM OBRA o
-INNER JOIN RESERVA r ON o.id_obra = r.id_obra
+    r.id_obra,
+    o.titulo AS titulo_obra,
+    ROW_NUMBER() OVER (
+        PARTITION BY r.id_obra
+        ORDER BY r.data_reserva ASC, r.id_reserva ASC
+    ) AS posicao_na_fila,
+    p.id_pessoa,
+    p.nome AS nome_solicitante,
+    p.email,
+    TO_CHAR(r.data_reserva, 'DD/MM/YYYY HH24:MI:SS') AS data_hora_reserva,
+    r.situacao
+FROM RESERVA r
+INNER JOIN OBRA o   ON o.id_obra = r.id_obra
+INNER JOIN PESSOA p ON p.id_pessoa = r.id_pessoa
 WHERE r.situacao = 'ATIVA'
-GROUP BY o.id_obra, o.titulo, o.tipo
-HAVING COUNT(DISTINCT r.id_reserva) >= 1
-ORDER BY qtd_reservas_ativas DESC, reserva_mais_antiga ASC;
+  -- Validação correlacionada da RN15: garante que NÃO EXISTE exemplar disponível para a obra
+  AND NOT EXISTS (
+      SELECT 1
+        FROM EXEMPLAR ex
+       WHERE ex.id_obra = r.id_obra
+         AND NOT EXISTS (
+             SELECT 1
+               FROM EMPRESTIMO emp
+              WHERE emp.id_obra = ex.id_obra
+                AND emp.numero_exemplar = ex.numero_exemplar
+                AND emp.data_devolucao IS NULL
+         )
+  )
+ORDER BY r.id_obra, posicao_na_fila;
