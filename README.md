@@ -8,6 +8,7 @@ A descrição e requisitos do projeto estão disponíveis em [specs/](specs/ESPE
 
 ## Contribuidores
 - **Alonso Fernandes Cavalcante** - acavalcante164@gmail.com
+- **Ruan Felipe Lauriano Ramos** - ruanflauriano@gmail.com
 
 ---
 
