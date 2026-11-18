@@ -70,7 +70,7 @@ A partir das entidades e relacionamentos levantados no DER, e aplicando o refina
 
 ## 3. Segunda Forma Normal (2FN)
 
-**Definição:** Uma relação está na **2FN** se está na 1FN e todo atributo não-primo depende funcionalmente de **toda** a chave primária (ausência de dependências funcionais parciais).
+**Definição:** Uma relação está na **2FN** se está na 1FN e todos os atributos não-chave devem depender de **toda** a chave primária, e não apenas de uma parte dela.
 
 > **Nota Formal:** As relações com chave primária simples (`DEPARTAMENTO`, `CURSO`, `DISCIPLINA`, `PESSOA`, `ALUNO`, `PROFESSOR`, `TURMA`, `AUDITORIA_NOTA`, `OBRA`, `AUTOR`, `EMPRESTIMO`, `RESERVA`, `MULTA`) já em 1FN estão **automaticamente na 2FN**. Avaliamos a seguir todas as relações de chave primária composta.
 
