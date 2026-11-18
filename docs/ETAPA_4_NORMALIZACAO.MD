@@ -97,7 +97,8 @@ Como todos os atributos de `TELEFONE_PESSOA(id_pessoa, telefone)`, `PRE_REQUISIT
 
 ## 4. Terceira Forma Normal (3FN)
 
-**Definição:** Uma relação está na **3FN** se está na 2FN e nenhum atributo não-primo é transitivamente dependente da chave primária (ausência de cadeias `X → Y → Z` onde `Y` não é superchave).
+**Definição:** Uma relação está na **3FN** se está na 2FN e não deve haver Dependência Transitiva entre atributos não-chave. **Todo atributo não-chave deve depender da chave, de toda a chave e APENAS da
+chave.** (ausência de cadeias `X → Y → Z` onde `Y` não é superchave).
 
 ### 4.1. Eliminação da Dependência Transitiva da Situação Final em `MATRICULA` (RN08 e Issue #10)
 * **Análise do Problema (Violação de 3FN se armazenado):**
